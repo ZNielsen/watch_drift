@@ -5,15 +5,16 @@
 // End measure
 
 use std::fs::File;
-use std::time::Instant;
+use std::path::PathBuf;
 use std::io;
 
 use clap::{Parser, Subcommand};
+use dirs;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
-const PATH: &str = "$HOME/dotfiles/not_quite_dotfiles/watches";
+const PATH: &str = "dotfiles/not_quite_dotfiles/watches";
 
 fn main() {
     let args = Cli::parse();
@@ -30,12 +31,31 @@ fn handle_new(wb: WatchBuilder) {
     let mut watch = Watch::new();
 
     watch.name = if wb.name.is_none() {
-        String::from("TODO - get input")
+        println!("Watch Name:");
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)
+            .expect("Failed to read line");
+        input.trim().to_owned()
     } else {
         wb.name.unwrap()
     };
     watch.movement = if wb.movement.is_none() {
-        Movement::Quartz
+        let mut mvt = None;
+        while mvt.is_none() {
+            println!("Watch type");
+            println!("  [1]: Quartz");
+            println!("  [2]: Mechanical");
+            println!("Enter [1/2]:");
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)
+                .expect("Failed to read line");
+            mvt = match input.trim() {
+                "1" => Some(Movement::Quartz),
+                "2" => Some(Movement::Mechanical),
+                _ => None,
+            };
+        }
+        mvt.unwrap()
     } else {
         wb.movement.unwrap()
     };
@@ -82,20 +102,38 @@ fn get_watches(re: Regex) -> Vec<Watch> {
     Vec::new()
 }
 
+fn get_path() -> PathBuf {
+   let mut home_dir = match dirs::home_dir() {
+        Some(path) => path,
+        None => {
+            println!("Couldn't determine the home directory.");
+            panic!();
+        }
+    };
+    home_dir.push(PATH);
+    home_dir
+}
 fn load_file() -> Vec<Watch> {
-    let file = File::open(PATH).unwrap();
+    let path = get_path();
+    let file = File::open(&path).unwrap_or_else(|_| {
+        File::create(&path).expect(&format!("Can't create [{:?}]", path))
+    });
     let reader = io::BufReader::new(file);
-    let watches = serde_json::from_reader(reader).unwrap();
+    let watches = serde_json::from_reader(reader).unwrap_or_else(|_| {
+        println!("WARNING: file is empty, starting a new database");
+        Vec::new()
+    });
     watches
 }
 fn save_file(w: Vec<Watch>) {
-    let file = File::open(PATH).unwrap();
+    let path = get_path();
+    let file = File::create(&path).unwrap();
     let writer = io::BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &w).unwrap();
 }
 
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct Watch {
     name: String,
     movement: Movement,
@@ -107,7 +145,7 @@ struct WatchBuilder {
     name: Option<String>,
     movement: Option<Movement>,
 }
-#[derive(Serialize, Deserialize, clap::ValueEnum, Clone)]
+#[derive(Serialize, Deserialize, clap::ValueEnum, Clone, Debug)]
 enum Movement {
     Quartz,
     Mechanical,
@@ -125,17 +163,20 @@ impl Watch {
     }
 
     fn save(&self) {
+        println!("Saving watch: {:#?}", self);
         let mut watches = load_file();
         let mut found = false;
         for w in &mut watches {
             if w.name == self.name {
-                found                = true;
+                println!("Found watch with the same name, updating");
+                found = true;
                 *w = self.clone();
                 break;
             }
         }
 
         if !found {
+            println!("Adding new watch entry");
             watches.push(self.clone());
         }
 
@@ -154,9 +195,10 @@ enum Commands {
     /// Create a new watch
     New {
         /// Name of the watch
+        #[clap(short)]
         name: Option<String>,
         /// quartz or mechanical movement
-        #[clap(value_enum)]
+        #[clap(short, value_enum)]
         movement: Option<Movement>,
     },
 
