@@ -278,16 +278,20 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Commands {
-    /// Create a new watch
+    /// Create a new watch. May pass in -n <name> and -m <movement>
     New {
         /// Name of the watch
         #[clap(short)]
         name: Option<String>,
-        /// quartz or mechanical movement
+        /// QUARTZ or MECHANICAL movement
+        ///
+        /// Used when calculating how the watch is running to give you Seconds per Day (spd) or
+        /// Seconds per Month (spm)
         #[clap(short, value_enum)]
         movement: Option<Movement>,
     },
 
+    /// Lists watches in the database. Takes an optional regex pattern to filter.
     Ls {
         /// Regex string used to filter watches
         #[clap(default_value = "")]
@@ -306,7 +310,7 @@ enum Commands {
         name: String,
     },
 
-    /// Force calculation. Useful after manually editing the database file
+    /// Force a recalculation of how the watch is running. Useful after manually editing the database file.
     Recalculate {
         #[clap(default_value = "")]
         search: String,
