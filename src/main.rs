@@ -6,8 +6,9 @@
 
 use std::fs::File;
 use std::path::PathBuf;
-use std::io;
+use std::io::{self, Write};
 
+use chrono::{self, DateTime, Datelike, Local, TimeZone, Timelike};
 use clap::{Parser, Subcommand};
 use dirs;
 use regex::Regex;
@@ -18,20 +19,19 @@ const PATH: &str = "dotfiles/not_quite_dotfiles/watches";
 
 fn main() {
     let args = Cli::parse();
-
-    // See if fits command list
     match args.command {
         Commands::New { name, movement } => handle_new(WatchBuilder{ name, movement }),
-        Commands::Start { name } => panic!(),
-        Commands::End { name } => panic!(),
-        Commands::Ls { search } => handle_search(search),
+        Commands::Start { name }         => handle_start(name),
+        Commands::End { name }           => panic!(),
+        Commands::Ls { search }          => handle_search(search),
     }
 }
 fn handle_new(wb: WatchBuilder) {
     let mut watch = Watch::new();
 
     watch.name = if wb.name.is_none() {
-        println!("Watch Name:");
+        print!("Watch Name: ");
+        io::stdout().flush().unwrap();
         let mut input = String::new();
         io::stdin().read_line(&mut input)
             .expect("Failed to read line");
@@ -45,7 +45,8 @@ fn handle_new(wb: WatchBuilder) {
             println!("Watch type");
             println!("  [1]: Quartz");
             println!("  [2]: Mechanical");
-            println!("Enter [1/2]:");
+            print!  ("Enter (1/2): ");
+            io::stdout().flush().unwrap();
             let mut input = String::new();
             io::stdin().read_line(&mut input)
                 .expect("Failed to read line");
@@ -62,9 +63,51 @@ fn handle_new(wb: WatchBuilder) {
 
     watch.save();
 }
+fn handle_start(name: String) {
+    let matches = get_matching_watches(&name);
+    if matches.is_empty() {
+        println!("No matches for regex [{}]", name);
+        std::process::exit(1);
+    }
+    if matches.len() > 1 {
+        println!("Multiple matches for regex [{}]:", name);
+        println!("{:#?}", matches);
+        std::process::exit(1);
+    }
+
+    let mut w = matches[0].clone();
+    print!("Press [Enter] at watch's :00... ");
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)
+        .expect("Failed to read line");
+
+    let now = Local::now();
+    w.measure_start.real_time = now;
+    let presumptive_watch_time = now.checked_add_signed(chrono::TimeDelta::seconds(15)).unwrap();
+    println!("Assuming watch time of [{}]", presumptive_watch_time.format("%H:%M"));
+    print!("[Enter] to accept, or give correction: ");
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)
+        .expect("Failed to read line");
+
+    let watch_time = match input.trim() {
+        "" => Local.with_ymd_and_hms(now.year(), now.month(), now.day(),
+                presumptive_watch_time.hour(), presumptive_watch_time.minute(), 00),
+        _ => {
+            let re = Regex::new(r"(\d{2}):(\d{2})").unwrap();
+            let caps = re.captures(input.trim()).unwrap();
+            Local.with_ymd_and_hms(now.year(), now.month(), now.day(),
+                caps[1].parse().unwrap(), caps[2].parse().unwrap(), 00)
+        },
+    }.unwrap();
+    w.measure_start.watch_time = watch_time;
+    w.save()
+}
 fn handle_search(query: String) {
-    let re = Regex::new(&query).unwrap();
-    get_watches(re);
+    // TODO - spritz this up
+    println!("{:#?}", get_matching_watches(&query));
 }
 
 fn start_watch_measure() {
@@ -79,29 +122,17 @@ fn update_watch_measure() {
     // print + save
 }
 
-// fn get_sync_time() -> WatchTimePair {
-//     // Ask for enter key exactly at :00
-//     let mut s = String::new();
-//     println!("Press [Enter] when the second hand hits exactly :00");
-//     let timepair = match io::stdin().read_line(&mut s) {
-//         Ok(_) => {
-//             let now = Instant::now()
-//         }
-//         Err(e) => {
-//             panic!("Got error when getting stdin: {}", e);
-//         }
-//     };
-// }
-
-
-fn get_watches(re: Regex) -> Vec<Watch> {
+fn get_matching_watches(query: &str) -> Vec<Watch> {
+    let re = Regex::new(&query).unwrap();
     let watches = load_file();
-
-    // Filter with regex
-    // return matching watches
-    Vec::new()
+    let mut matching = Vec::new();
+    for w in watches {
+        if re.is_match(&w.name) {
+            matching.push(w.clone())
+        }
+    }
+    matching
 }
-
 fn get_path() -> PathBuf {
    let mut home_dir = match dirs::home_dir() {
         Some(path) => path,
@@ -115,7 +146,9 @@ fn get_path() -> PathBuf {
 }
 fn load_file() -> Vec<Watch> {
     let path = get_path();
+    println!("Loading path: {:?}", path);
     let file = File::open(&path).unwrap_or_else(|_| {
+        println!("No file at path, creating [{:?}]", path);
         File::create(&path).expect(&format!("Can't create [{:?}]", path))
     });
     let reader = io::BufReader::new(file);
@@ -137,13 +170,26 @@ fn save_file(w: Vec<Watch>) {
 struct Watch {
     name: String,
     movement: Movement,
-    measure_running: bool,
-    measure_start_diff: std::time::Duration,
-    measure_end_diff: std::time::Duration,
+    measure_start: WatchTimePair,
+    measure_end: WatchTimePair,
 }
 struct WatchBuilder {
     name: Option<String>,
     movement: Option<Movement>,
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct WatchTimePair {
+    watch_time: DateTime<Local>,
+    real_time: DateTime<Local>,
+}
+impl Default for WatchTimePair {
+    fn default() -> Self {
+        let t = Local.with_ymd_and_hms(2000, 2, 2, 2, 2, 2).unwrap();
+        WatchTimePair {
+            watch_time: t,
+            real_time: t,
+        }
+    }
 }
 #[derive(Serialize, Deserialize, clap::ValueEnum, Clone, Debug)]
 enum Movement {
@@ -156,9 +202,8 @@ impl Watch {
         Watch {
             name: String::new(),
             movement: Movement::Quartz,
-            measure_running: false,
-            measure_start_diff: std::time::Duration::new(0, 0),
-            measure_end_diff: std::time::Duration::new(0, 0),
+            measure_start: WatchTimePair::default(),
+            measure_end: WatchTimePair::default(),
         }
     }
 
@@ -204,6 +249,7 @@ enum Commands {
 
     Ls {
         /// Regex string used to filter watches
+        #[clap(default_value = "")]
         search: String,
     },
 
