@@ -7,7 +7,7 @@ use std::io::{self, Write};
 use chrono::{self, DateTime, Datelike, Local, TimeZone, Timelike};
 use clap::{Parser, Subcommand};
 use dirs;
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -20,6 +20,7 @@ fn main() {
         Commands::Start { name }         => handle_start(name),
         Commands::End { name }           => handle_end(name),
         Commands::Ls { search }          => handle_search(search),
+        Commands::Recalculate { search } => handle_recalculate(search),
     }
 }
 fn handle_new(wb: WatchBuilder) {
@@ -75,13 +76,7 @@ fn handle_end(name: String) {
 
     w.measure_end.real_time = now;
     w.measure_end.watch_time = watch_time;
-
-    let real_time_passed = now.signed_duration_since(w.measure_start.real_time);
-    let watch_time_passed = watch_time.signed_duration_since(w.measure_start.watch_time);
-    let duration_diff = watch_time_passed.num_seconds() - real_time_passed.num_seconds();
-    let diff_per_unit = (duration_diff * w.movement.unit()) / real_time_passed.num_seconds();
-    w.running = Some(diff_per_unit);
-
+    w.update_running();
     w.save();
 
     println!("\n");
@@ -92,6 +87,13 @@ fn handle_end(name: String) {
 fn handle_search(query: String) {
     // TODO - spritz this up?
     println!("{:#?}", get_matching_watches(&query));
+}
+fn handle_recalculate(query: String) {
+    let mut watches= get_matching_watches(&query);
+    for w in &mut watches {
+        w.update_running();
+        w.save();
+    }
 }
 
 fn get_matching_watch(query: String) -> Watch {
@@ -117,7 +119,7 @@ fn get_00_time() -> DateTime<Local> {
     Local::now()
 }
 fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
-    let presumptive_watch_time = t.checked_add_signed(chrono::TimeDelta::seconds(15)).unwrap();
+    let presumptive_watch_time = t.checked_add_signed(chrono::TimeDelta::seconds(20)).unwrap();
     println!("Assuming watch time of [{}]", presumptive_watch_time.format("%H:%M"));
     print!("[Enter] to accept, or give correction: ");
     io::stdout().flush().unwrap();
@@ -138,7 +140,10 @@ fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
 }
 
 fn get_matching_watches(query: &str) -> Vec<Watch> {
-    let re = Regex::new(&query).unwrap();
+    let re = RegexBuilder::new(&query)
+        .case_insensitive(true)
+        .build()
+        .unwrap();
     let watches = load_file();
     let mut matching = Vec::new();
     for w in watches {
@@ -186,8 +191,7 @@ struct Watch {
     movement: Movement,
     measure_start: WatchTimePair,
     measure_end: WatchTimePair,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    running: Option<i64>
+    running: Option<f64>
 }
 struct WatchBuilder {
     name: Option<String>,
@@ -215,8 +219,8 @@ enum Movement {
 impl Movement {
     fn unit(&self) -> i64 {
         match self {
-            Movement::Quartz => 2628000,
-            Movement::Mechanical => 86400,
+            Movement::Quartz => 2628000000,
+            Movement::Mechanical => 86400000,
         }
     }
     fn unit_str(&self) -> &str {
@@ -256,6 +260,14 @@ impl Watch {
 
         save_file(watches)
     }
+
+    fn update_running(&mut self) {
+        let real_time_passed = self.measure_end.real_time.signed_duration_since(self.measure_start.real_time);
+        let watch_time_passed = self.measure_end.watch_time.signed_duration_since(self.measure_start.watch_time);
+        let duration_diff = watch_time_passed.num_milliseconds() - real_time_passed.num_milliseconds();
+        let diff_per_unit = (duration_diff * self.movement.unit()) as f64 / real_time_passed.num_milliseconds() as f64;
+        self.running = Some(diff_per_unit.round() / 1000.0);
+    }
 }
 
 #[derive(Parser)]
@@ -292,5 +304,11 @@ enum Commands {
     End {
         /// Name of the watch
         name: String,
+    },
+
+    /// Force calculation. Useful after manually editing the database file
+    Recalculate {
+        #[clap(default_value = "")]
+        search: String,
     },
 }
