@@ -1,8 +1,4 @@
-// Save to json file
-// Print current deltas, optional filter (regex match)
-// New watch
-// Start measure
-// End measure
+// © Zach Nielsen 2024
 
 use std::fs::File;
 use std::path::PathBuf;
@@ -22,7 +18,7 @@ fn main() {
     match args.command {
         Commands::New { name, movement } => handle_new(WatchBuilder{ name, movement }),
         Commands::Start { name }         => handle_start(name),
-        Commands::End { name }           => panic!(),
+        Commands::End { name }           => handle_end(name),
         Commands::Ls { search }          => handle_search(search),
     }
 }
@@ -64,27 +60,64 @@ fn handle_new(wb: WatchBuilder) {
     watch.save();
 }
 fn handle_start(name: String) {
-    let matches = get_matching_watches(&name);
+    let mut w = get_matching_watch(name);
+    let now = get_00_time();
+    let watch_time = get_watch_time_from_real_time(now);
+
+    w.measure_start.real_time = now;
+    w.measure_start.watch_time = watch_time;
+    w.save()
+}
+fn handle_end(name: String) {
+    let mut w = get_matching_watch(name);
+    let now = get_00_time();
+    let watch_time = get_watch_time_from_real_time(now);
+
+    w.measure_end.real_time = now;
+    w.measure_end.watch_time = watch_time;
+
+    let real_time_passed = now.signed_duration_since(w.measure_start.real_time);
+    let watch_time_passed = watch_time.signed_duration_since(w.measure_start.watch_time);
+    let duration_diff = watch_time_passed.num_seconds() - real_time_passed.num_seconds();
+    let diff_per_unit = (duration_diff * w.movement.unit()) / real_time_passed.num_seconds();
+    w.running = Some(diff_per_unit);
+
+    w.save();
+
+    println!("\n");
+    println!("Watch is running at {} seconds per {}",
+        w.running.unwrap(), w.movement.unit_str());
+    println!("")
+}
+fn handle_search(query: String) {
+    // TODO - spritz this up?
+    println!("{:#?}", get_matching_watches(&query));
+}
+
+fn get_matching_watch(query: String) -> Watch {
+    let matches = get_matching_watches(&query);
     if matches.is_empty() {
-        println!("No matches for regex [{}]", name);
+        println!("No matches for regex [{}]", query);
         std::process::exit(1);
     }
     if matches.len() > 1 {
-        println!("Multiple matches for regex [{}]:", name);
+        println!("Multiple matches for regex [{}]:", query);
         println!("{:#?}", matches);
         std::process::exit(1);
     }
-
-    let mut w = matches[0].clone();
+    matches[0].clone()
+}
+fn get_00_time() -> DateTime<Local> {
     print!("Press [Enter] at watch's :00... ");
     io::stdout().flush().unwrap();
     let mut input = String::new();
     io::stdin().read_line(&mut input)
         .expect("Failed to read line");
 
-    let now = Local::now();
-    w.measure_start.real_time = now;
-    let presumptive_watch_time = now.checked_add_signed(chrono::TimeDelta::seconds(15)).unwrap();
+    Local::now()
+}
+fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
+    let presumptive_watch_time = t.checked_add_signed(chrono::TimeDelta::seconds(15)).unwrap();
     println!("Assuming watch time of [{}]", presumptive_watch_time.format("%H:%M"));
     print!("[Enter] to accept, or give correction: ");
     io::stdout().flush().unwrap();
@@ -92,34 +125,16 @@ fn handle_start(name: String) {
     io::stdin().read_line(&mut input)
         .expect("Failed to read line");
 
-    let watch_time = match input.trim() {
-        "" => Local.with_ymd_and_hms(now.year(), now.month(), now.day(),
+    match input.trim() {
+        "" => Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
                 presumptive_watch_time.hour(), presumptive_watch_time.minute(), 00),
         _ => {
             let re = Regex::new(r"(\d{2}):(\d{2})").unwrap();
             let caps = re.captures(input.trim()).unwrap();
-            Local.with_ymd_and_hms(now.year(), now.month(), now.day(),
+            Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
                 caps[1].parse().unwrap(), caps[2].parse().unwrap(), 00)
         },
-    }.unwrap();
-    w.measure_start.watch_time = watch_time;
-    w.save()
-}
-fn handle_search(query: String) {
-    // TODO - spritz this up
-    println!("{:#?}", get_matching_watches(&query));
-}
-
-fn start_watch_measure() {
-    // Ask for enter key exactly at :00
-    // Assume like +15 seconds, allow for correction
-    // Take delta, save it off
-}
-
-fn update_watch_measure() {
-    // Assume 0s drift, allow for correction
-    // Compare to stored value
-    // print + save
+    }.unwrap()
 }
 
 fn get_matching_watches(query: &str) -> Vec<Watch> {
@@ -146,14 +161,13 @@ fn get_path() -> PathBuf {
 }
 fn load_file() -> Vec<Watch> {
     let path = get_path();
-    println!("Loading path: {:?}", path);
     let file = File::open(&path).unwrap_or_else(|_| {
         println!("No file at path, creating [{:?}]", path);
         File::create(&path).expect(&format!("Can't create [{:?}]", path))
     });
     let reader = io::BufReader::new(file);
     let watches = serde_json::from_reader(reader).unwrap_or_else(|_| {
-        println!("WARNING: file is empty, starting a new database");
+        println!("WARNING: file is empty or parsing failed, starting a new database");
         Vec::new()
     });
     watches
@@ -172,6 +186,8 @@ struct Watch {
     movement: Movement,
     measure_start: WatchTimePair,
     measure_end: WatchTimePair,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    running: Option<i64>
 }
 struct WatchBuilder {
     name: Option<String>,
@@ -196,6 +212,20 @@ enum Movement {
     Quartz,
     Mechanical,
 }
+impl Movement {
+    fn unit(&self) -> i64 {
+        match self {
+            Movement::Quartz => 2628000,
+            Movement::Mechanical => 86400,
+        }
+    }
+    fn unit_str(&self) -> &str {
+        match self {
+            Movement::Quartz => "month",
+            Movement::Mechanical => "day",
+        }
+    }
+}
 
 impl Watch {
     fn new() -> Self {
@@ -204,6 +234,7 @@ impl Watch {
             movement: Movement::Quartz,
             measure_start: WatchTimePair::default(),
             measure_end: WatchTimePair::default(),
+            running: None
         }
     }
 
@@ -213,13 +244,11 @@ impl Watch {
         let mut found = false;
         for w in &mut watches {
             if w.name == self.name {
-                println!("Found watch with the same name, updating");
                 found = true;
                 *w = self.clone();
                 break;
             }
         }
-
         if !found {
             println!("Adding new watch entry");
             watches.push(self.clone());
