@@ -66,8 +66,11 @@ fn handle_start(name: String) {
     let now = get_00_time();
     let watch_time = get_watch_time_from_real_time(now);
 
-    w.measure_start.real_time = now;
-    w.measure_start.watch_time = watch_time;
+    w.measure_start = Some( WatchTimePair {
+        real_time: now,
+        watch_time,
+    });
+    w.measure_end = None;
     w.save()
 }
 fn handle_end(name: String) {
@@ -76,8 +79,10 @@ fn handle_end(name: String) {
     let now = get_00_time();
     let watch_time = get_watch_time_from_real_time(now);
 
-    w.measure_end.real_time = now;
-    w.measure_end.watch_time = watch_time;
+    w.measure_end = Some( WatchTimePair {
+        real_time: now,
+        watch_time,
+    });
     w.update_running();
     w.save();
 
@@ -88,6 +93,7 @@ fn handle_end(name: String) {
 }
 fn handle_search(query: String) {
     // TODO - spritz this up?
+    // print the "measured over" duration
     println!("{:#?}", get_matching_watches(&query));
 }
 fn handle_recalculate(query: String) {
@@ -191,8 +197,11 @@ fn save_file(w: Vec<Watch>) {
 struct Watch {
     name: String,
     movement: Movement,
-    measure_start: WatchTimePair,
-    measure_end: WatchTimePair,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    measure_start: Option<WatchTimePair>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    measure_end: Option<WatchTimePair>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     running: Option<f64>
 }
 struct WatchBuilder {
@@ -203,15 +212,6 @@ struct WatchBuilder {
 struct WatchTimePair {
     watch_time: DateTime<Local>,
     real_time: DateTime<Local>,
-}
-impl Default for WatchTimePair {
-    fn default() -> Self {
-        let t = Local.with_ymd_and_hms(2000, 2, 2, 2, 2, 2).unwrap();
-        WatchTimePair {
-            watch_time: t,
-            real_time: t,
-        }
-    }
 }
 #[derive(Serialize, Deserialize, clap::ValueEnum, Clone, Debug)]
 enum Movement {
@@ -238,8 +238,8 @@ impl Watch {
         Watch {
             name: String::new(),
             movement: Movement::Quartz,
-            measure_start: WatchTimePair::default(),
-            measure_end: WatchTimePair::default(),
+            measure_start: None,
+            measure_end: None,
             running: None
         }
     }
@@ -264,8 +264,13 @@ impl Watch {
     }
 
     fn update_running(&mut self) {
-        let real_time_passed = self.measure_end.real_time.signed_duration_since(self.measure_start.real_time);
-        let watch_time_passed = self.measure_end.watch_time.signed_duration_since(self.measure_start.watch_time);
+        let real_time_start  = self.measure_start.clone().unwrap().real_time;
+        let watch_time_start = self.measure_start.clone().unwrap().watch_time;
+        let real_time_end    = self.measure_end.clone().unwrap().real_time;
+        let watch_time_end   = self.measure_end.clone().unwrap().watch_time;
+
+        let real_time_passed = real_time_end.signed_duration_since(real_time_start);
+        let watch_time_passed = watch_time_end.signed_duration_since(watch_time_start);
         let duration_diff = watch_time_passed.num_milliseconds() - real_time_passed.num_milliseconds();
         let diff_per_unit = (duration_diff * self.movement.unit()) as f64 / real_time_passed.num_milliseconds() as f64;
         self.running = Some(diff_per_unit.round() / 1000.0);
