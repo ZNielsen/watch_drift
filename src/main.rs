@@ -62,6 +62,7 @@ fn handle_new(wb: WatchBuilder) {
 }
 fn handle_start(name: String) {
     let mut w = get_matching_watch(name);
+    println!("Starting measure for [{}]", w.name);
     let now = get_00_time();
     let watch_time = get_watch_time_from_real_time(now);
 
@@ -71,6 +72,7 @@ fn handle_start(name: String) {
 }
 fn handle_end(name: String) {
     let mut w = get_matching_watch(name);
+    println!("Ending measure for [{}]", w.name);
     let now = get_00_time();
     let watch_time = get_watch_time_from_real_time(now);
 
