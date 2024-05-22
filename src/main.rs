@@ -86,9 +86,15 @@ fn handle_end(name: String) {
     w.update_running();
     w.save();
 
+    let start = w.measure_start.unwrap();
+    let end = w.measure_end.unwrap();
+    let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
+    let hectodays  = s as f64 / 864.0;
+    let days = hectodays.round() / 100.0;
+
     println!("\n");
-    println!("Watch is running at {} seconds per {}",
-        w.running.unwrap(), w.movement.unit_str());
+    println!("Watch is running at {} seconds per {}, measured over {} days",
+        w.running.unwrap(), w.movement.unit_str(), days);
     println!("")
 }
 fn handle_search(query: String) {
@@ -107,8 +113,8 @@ fn handle_search(query: String) {
         if let Some(end) = w.measure_end {
             let start = w.measure_start.unwrap();
             let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
-            let centidays  = s as f64 / 864.0;
-            println!("  Measured over: {} days", centidays.round() / 100.00);
+            let hectodays  = s as f64 / 864.0;
+            println!("  Measured over: {} days", hectodays.round() / 100.00);
         }
         println!("");
     }
