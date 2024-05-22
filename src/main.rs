@@ -92,9 +92,26 @@ fn handle_end(name: String) {
     println!("")
 }
 fn handle_search(query: String) {
-    // TODO - spritz this up?
-    // print the "measured over" duration
-    println!("{:#?}", get_matching_watches(&query));
+    let watches = get_matching_watches(&query);
+    for w in watches {
+        println!("Name: {}", w.name);
+        println!("  Movement: {}", w.movement.to_str());
+
+        if let Some(run) = w.running {
+            println!("  Running at: {} seconds per {}", run, w.movement.unit_str());
+        } else {
+            println!("  No measure yet");
+        }
+
+        // 'measured over'
+        if let Some(end) = w.measure_end {
+            let start = w.measure_start.unwrap();
+            let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
+            let centidays  = s as f64 / 864.0;
+            println!("  Measured over: {} days", centidays.round() / 100.00);
+        }
+        println!("");
+    }
 }
 fn handle_recalculate(query: String) {
     let mut watches= get_matching_watches(&query);
@@ -229,6 +246,12 @@ impl Movement {
         match self {
             Movement::Quartz => "month",
             Movement::Mechanical => "day",
+        }
+    }
+    fn to_str(&self) -> &str {
+        match self {
+            Movement::Quartz => "Quartz",
+            Movement::Mechanical => "Mechanical",
         }
     }
 }
