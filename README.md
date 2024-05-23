@@ -7,6 +7,11 @@ When setting my mechanical watch time, I typically will tune how far ahead I set
 I don't need atomic level accuracy, so using `chrono::DateTime` is enough for me. Your computer clock
 will drift and affect your results. This is intended more for an order of magnitude, running fast/slow kind of thing.
 
+To force your computer to timesync now and perhaps increase the accuracy:
+```
+sudo sntp -sS time.apple.com
+```
+
 This tool has a hardcoded path since I'm the only one using it. If someone comes along with a PR allowing for a custom path, I'll gladly take it. Otherwise, check it out and change that path.
 
 ## Commands
