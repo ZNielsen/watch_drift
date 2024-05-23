@@ -7,7 +7,7 @@ When setting my mechanical watch time, I typically will tune how far ahead I set
 I don't need atomic level accuracy, so using `chrono::DateTime` is enough for me. Your computer clock
 will drift and affect your results. This is intended more for an order of magnitude, running fast/slow kind of thing.
 
-To force your computer to timesync now and perhaps increase the accuracy:
+To force your computer to timesync now and perhaps increase the accuracy (macOS):
 ```
 sudo sntp -sS time.apple.com
 ```
