@@ -93,7 +93,7 @@ fn handle_end(name: String) {
     let days = hectodays.round() / 100.0;
 
     println!("\n");
-    println!("Watch is running at {} seconds per {}, measured over {} days",
+    println!("Watch is running at {:+} seconds per {}, measured over {} days",
         w.running.unwrap(), w.movement.unit_str(), days);
     println!("")
 }
@@ -104,7 +104,7 @@ fn handle_search(query: String) {
         println!("  Movement: {}", w.movement.to_str());
 
         if let Some(run) = w.running {
-            println!("  Running at: {} seconds per {}", run, w.movement.unit_str());
+            println!("  Running at: {:+} seconds per {}", run, w.movement.unit_str());
         } else {
             println!("  No measure yet");
         }
