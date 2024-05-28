@@ -191,20 +191,6 @@ fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
 
     Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
             watch_time.hour(), watch_time.minute(), 00).unwrap()
-
-    // let mut input = String::new();
-    // io::stdin().read_line(&mut input)
-    //     .expect("Failed to read line");
-    // match input.trim() {
-    //     "" => Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
-    //             presumptive_watch_time.hour(), presumptive_watch_time.minute(), 00),
-    //     _ => {
-    //         let re = Regex::new(r"(\d\d?):(\d{2})").unwrap();
-    //         let caps = re.captures(input.trim()).unwrap();
-    //         Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
-    //             caps[1].parse().unwrap(), caps[2].parse().unwrap(), 00)
-    //     },
-    // }.unwrap()
 }
 
 fn get_matching_watches(query: &str) -> Vec<Watch> {
