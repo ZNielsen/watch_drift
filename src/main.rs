@@ -4,10 +4,11 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::io::{self, Write};
 
+use crossterm::{self, event::KeyCode};
 use chrono::{self, DateTime, Datelike, Local, TimeZone, Timelike};
 use clap::{Parser, Subcommand};
 use dirs;
-use regex::{Regex, RegexBuilder};
+use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -150,24 +151,60 @@ fn get_00_time() -> DateTime<Local> {
     Local::now()
 }
 fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
-    let presumptive_watch_time = t.checked_add_signed(chrono::TimeDelta::seconds(20)).unwrap();
-    println!("Assuming watch time of [{}]", presumptive_watch_time.format("%H:%M"));
-    print!("[Enter] to accept, or give correction: ");
-    io::stdout().flush().unwrap();
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)
-        .expect("Failed to read line");
+    let mut stdout = io::stdout();
+    let mut watch_time = t.checked_add_signed(chrono::TimeDelta::seconds(20)).unwrap();
+    print!("Enter watch time, adjust with ↑/↓: [{}]", watch_time.format("%H:%M"));
+    stdout.flush().unwrap();
 
-    match input.trim() {
-        "" => Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
-                presumptive_watch_time.hour(), presumptive_watch_time.minute(), 00),
-        _ => {
-            let re = Regex::new(r"(\d\d?):(\d{2})").unwrap();
-            let caps = re.captures(input.trim()).unwrap();
-            Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
-                caps[1].parse().unwrap(), caps[2].parse().unwrap(), 00)
-        },
-    }.unwrap()
+    let (_cursor_x, cursor_y) = crossterm::cursor::position().unwrap();
+
+    let mut update_time = |time: &DateTime<Local>| {
+        // 38/42
+        crossterm::execute!(stdout, crossterm::cursor::MoveTo(38, cursor_y)).unwrap();
+        crossterm::execute!(stdout, crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine)).unwrap();
+        print!("[{}]", time.format("%H:%M"));
+        stdout.flush().unwrap();
+    };
+
+    crossterm::terminal::enable_raw_mode().unwrap();
+
+    loop {
+        if crossterm::event::poll(std::time::Duration::from_millis(150)).unwrap() {
+            if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
+                match key_event.code {
+                    KeyCode::Up => {
+                        watch_time = watch_time.checked_add_signed(chrono::TimeDelta::minutes(1)).unwrap();
+                        update_time(&watch_time);
+                    },
+                    KeyCode::Down => {
+                        watch_time = watch_time.checked_sub_signed(chrono::TimeDelta::minutes(1)).unwrap();
+                        update_time(&watch_time);
+                    },
+                    KeyCode::Enter => break,
+                    _ => {},
+                }
+            }
+        }
+    }
+
+    crossterm::terminal::disable_raw_mode().unwrap();
+
+    Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
+            watch_time.hour(), watch_time.minute(), 00).unwrap()
+
+    // let mut input = String::new();
+    // io::stdin().read_line(&mut input)
+    //     .expect("Failed to read line");
+    // match input.trim() {
+    //     "" => Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
+    //             presumptive_watch_time.hour(), presumptive_watch_time.minute(), 00),
+    //     _ => {
+    //         let re = Regex::new(r"(\d\d?):(\d{2})").unwrap();
+    //         let caps = re.captures(input.trim()).unwrap();
+    //         Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
+    //             caps[1].parse().unwrap(), caps[2].parse().unwrap(), 00)
+    //     },
+    // }.unwrap()
 }
 
 fn get_matching_watches(query: &str) -> Vec<Watch> {
