@@ -225,10 +225,7 @@ fn load_file() -> Vec<Watch> {
         File::create(&path).expect(&format!("Can't create [{:?}]", path))
     });
     let reader = io::BufReader::new(file);
-    let watches = serde_json::from_reader(reader).unwrap_or_else(|_| {
-        println!("WARNING: file is empty or parsing failed, starting a new database");
-        Vec::new()
-    });
+    let watches = serde_json::from_reader(reader).unwrap();
     watches
 }
 fn save_file(w: Vec<Watch>) {
