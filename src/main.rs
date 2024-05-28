@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::io::{self, Write};
 
 use crossterm::{self, event::KeyCode};
-use chrono::{self, DateTime, Datelike, Local, TimeZone, Timelike};
+use chrono::{self, DateTime, Datelike, Local, naive::NaiveDate, TimeZone, Timelike};
 use clap::{Parser, Subcommand};
 use dirs;
 use regex::RegexBuilder;
@@ -22,6 +22,7 @@ fn main() {
         Commands::End { name }           => handle_end(name),
         Commands::Ls { search }          => handle_search(search),
         Commands::Recalculate { search } => handle_recalculate(search),
+        Commands::Log { name }           => handle_log(name),
     }
 }
 fn handle_new(wb: WatchBuilder) {
@@ -125,6 +126,24 @@ fn handle_recalculate(query: String) {
     for w in &mut watches {
         w.update_running();
         w.save();
+    }
+}
+fn handle_log(name: String) {
+    let mut w = get_matching_watch(name);
+    println!("Tracking log for [{}]", w.name);
+    print!("Confirm? [Enter], ^C to cancel: ");
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)
+        .expect("Failed to read line");
+
+    let date = Local::now().date_naive();
+    if !w.logs.contains(&date) {
+        w.logs.push(date);
+        w.save();
+        println!("Added log for watch. Now worn on {} days.", w.logs.len())
+    } else {
+        println!("Already logged watch for today, not adding again.");
     }
 }
 
@@ -245,7 +264,8 @@ struct Watch {
     #[serde(skip_serializing_if = "Option::is_none")]
     measure_end: Option<WatchTimePair>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    running: Option<f64>
+    running: Option<f64>,
+    logs: Vec<NaiveDate>,
 }
 struct WatchBuilder {
     name: Option<String>,
@@ -289,7 +309,8 @@ impl Watch {
             movement: Movement::Quartz,
             measure_start: None,
             measure_end: None,
-            running: None
+            running: None,
+            logs: Vec::new(),
         }
     }
 
@@ -370,5 +391,10 @@ enum Commands {
     Recalculate {
         #[clap(default_value = "")]
         search: String,
+    },
+
+    /// Mark down a wear for today of the given watch
+    Log {
+        name: String,
     },
 }
