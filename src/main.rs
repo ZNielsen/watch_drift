@@ -179,7 +179,7 @@ fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
     let (_cursor_x, cursor_y) = crossterm::cursor::position().unwrap();
 
     let mut update_time = |time: &DateTime<Local>| {
-        // 38/42
+        // 35/38/42?
         crossterm::execute!(stdout, crossterm::cursor::MoveTo(35, cursor_y)).unwrap();
         crossterm::execute!(stdout, crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine)).unwrap();
         print!("[{}]", time.format("%H:%M"));
@@ -187,7 +187,6 @@ fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
     };
 
     crossterm::terminal::enable_raw_mode().unwrap();
-
     loop {
         if crossterm::event::poll(std::time::Duration::from_millis(150)).unwrap() {
             if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
@@ -206,9 +205,9 @@ fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
             }
         }
     }
-    println!("");
-
     crossterm::terminal::disable_raw_mode().unwrap();
+
+    println!("\n");
 
     Local.with_ymd_and_hms(t.year(), t.month(), t.day(),
             watch_time.hour(), watch_time.minute(), 00).unwrap()
