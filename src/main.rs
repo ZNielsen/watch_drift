@@ -171,7 +171,7 @@ fn get_00_time() -> DateTime<Local> {
 }
 fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
     let mut stdout = io::stdout();
-    let mut watch_time = t.checked_add_signed(chrono::TimeDelta::seconds(20)).unwrap();
+    let mut watch_time = t.checked_add_signed(chrono::TimeDelta::seconds(55)).unwrap();
     print!("Enter watch time, adjust with ↑/↓: [{}]", watch_time.format("%H:%M"));
     // print!("Enter watch time, adjust with [Up]/[Down]: [{}]", watch_time.format("%H:%M"));
     stdout.flush().unwrap();
