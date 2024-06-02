@@ -21,5 +21,6 @@ This tool has a hardcoded path since I'm the only one using it. If someone comes
   start        Start a measure for the given watch
   end          End or Update a measure for the given watch
   recalculate  Force a recalculation of how the watch is running. Useful after manually editing the database file
+  log          Mark down a wear of the given watch for today
 ```
 
