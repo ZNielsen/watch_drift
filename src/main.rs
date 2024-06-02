@@ -18,11 +18,11 @@ fn main() {
     let args = Cli::parse();
     match args.command {
         Commands::New { name, movement } => handle_new(WatchBuilder{ name, movement }),
-        Commands::Start { name }         => handle_start(name),
-        Commands::End { name }           => handle_end(name),
-        Commands::Ls { search }          => handle_search(search),
-        Commands::Recalculate { search } => handle_recalculate(search),
-        Commands::Log { name }           => handle_log(name),
+        Commands::Start { name }         => handle_start(name.join(" ")),
+        Commands::End { name }           => handle_end(name.join(" ")),
+        Commands::Ls { search }          => handle_search(search.join(" ")),
+        Commands::Recalculate { search } => handle_recalculate(search.join(" ")),
+        Commands::Log { name }           => handle_log(name.join(" ")),
     }
 }
 fn handle_new(wb: WatchBuilder) {
@@ -372,30 +372,33 @@ enum Commands {
     /// Lists watches in the database. Takes an optional regex pattern to filter.
     Ls {
         /// Regex string used to filter watches
-        #[clap(default_value = "")]
-        search: String,
+        #[clap(default_value = "", trailing_var_arg = true, allow_hyphen_values = true)]
+        search: Vec<String>,
     },
 
     /// Start a measure for the given watch
     Start {
         /// Name of the watch
-        name: String,
+        #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
+        name: Vec<String>,
     },
 
     /// End or Update a measure for the given watch
     End {
         /// Name of the watch
-        name: String,
+        #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
+        name: Vec<String>,
     },
 
     /// Force a recalculation of how the watch is running. Useful after manually editing the database file.
     Recalculate {
-        #[clap(default_value = "")]
-        search: String,
+        #[clap(default_value = "", trailing_var_arg = true, allow_hyphen_values = true)]
+        search: Vec<String>,
     },
 
     /// Mark down a wear for today of the given watch
     Log {
-        name: String,
+        #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
+        name: Vec<String>,
     },
 }
