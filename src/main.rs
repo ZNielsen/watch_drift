@@ -4,9 +4,9 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::io::{self, Write};
 
-use crossterm::{self, event::KeyCode};
 use chrono::{self, DateTime, Datelike, Local, naive::NaiveDate, TimeZone, Timelike};
 use clap::{Parser, Subcommand};
+use crossterm::{self, event::KeyCode};
 use dirs;
 use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
@@ -147,6 +147,8 @@ fn handle_log(name: String) {
     }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 fn get_matching_watch(query: String) -> Watch {
     let matches = get_matching_watches(&query);
     if matches.is_empty() {
@@ -154,12 +156,70 @@ fn get_matching_watch(query: String) -> Watch {
         std::process::exit(1);
     }
     if matches.len() > 1 {
-        println!("Multiple matches for regex [{}]:", query);
-        println!("{:#?}", matches);
-        std::process::exit(1);
+        println!("Multiple matches for regex [{}]:\n", query);
+        return get_one_watch_from_matches(matches);
     }
     matches[0].clone()
 }
+fn get_one_watch_from_matches(watches: Vec<Watch>) -> Watch {
+    println!("Choose with arrow keys:");
+    for (idx, watch) in watches.iter().enumerate() {
+        println!("[{}] {}", idx, watch.name);
+    }
+
+    let mut stdout = io::stdout();
+    let (_cursor_x, cursor_y) = crossterm::cursor::position().unwrap();
+    let y_offset = cursor_y - watches.len() as u16;
+    let mut cursor_idx = 0;
+    crossterm::execute!(stdout, crossterm::cursor::MoveTo(0, cursor_idx as u16 + y_offset)).unwrap();
+    // Clear and redraw arrows
+    let mut update_selection = |cursor_idx: usize| {
+        let (_, pre_move_y) = crossterm::cursor::position().unwrap();
+        let pre_idx = match pre_move_y < cursor_idx as u16 + y_offset {
+            true  => cursor_idx - 1,
+            false => cursor_idx + 1,
+        };
+        crossterm::execute!(stdout,
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine),
+            crossterm::cursor::MoveTo(0, pre_move_y),
+            crossterm::style::Print(format!("[{}] {}", pre_idx, watches[pre_idx].name)),
+            crossterm::cursor::MoveTo(0, cursor_idx as u16 + y_offset),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine),
+            crossterm::style::Print(format!("[{}] --> {} <--", cursor_idx, watches[cursor_idx].name)),
+        ).unwrap();
+        stdout.flush().unwrap();
+    };
+
+    update_selection(cursor_idx);
+    crossterm::terminal::enable_raw_mode().unwrap();
+    loop {
+        if crossterm::event::poll(std::time::Duration::from_millis(150)).unwrap() {
+            if let crossterm::event::Event::Key(key_event) = crossterm::event::read().unwrap() {
+                match key_event.code {
+                    KeyCode::Up => {
+                        if cursor_idx > 0 {
+                            cursor_idx -= 1;
+                            update_selection(cursor_idx);
+                        }
+                    },
+                    KeyCode::Down => {
+                        if cursor_idx < watches.len()-1 {
+                            cursor_idx += 1;
+                            update_selection(cursor_idx);
+                        }
+                    },
+                    KeyCode::Enter => break,
+                    _ => {},
+                }
+            }
+        }
+    }
+    crossterm::terminal::disable_raw_mode().unwrap();
+
+    println!("\n");
+    watches[cursor_idx].clone()
+}
+
 fn get_00_time() -> DateTime<Local> {
     print!("Press [Enter] at watch's :00... ");
     io::stdout().flush().unwrap();
@@ -169,6 +229,7 @@ fn get_00_time() -> DateTime<Local> {
 
     Local::now()
 }
+
 fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
     let mut stdout = io::stdout();
     let mut watch_time = t.checked_add_signed(chrono::TimeDelta::seconds(55)).unwrap();
@@ -180,9 +241,11 @@ fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
 
     let mut update_time = |time: &DateTime<Local>| {
         // 35/38/42?
-        crossterm::execute!(stdout, crossterm::cursor::MoveTo(35, cursor_y)).unwrap();
-        crossterm::execute!(stdout, crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine)).unwrap();
-        print!("[{}]", time.format("%H:%M"));
+        crossterm::execute!(stdout,
+            crossterm::cursor::MoveTo(35, cursor_y),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine),
+            crossterm::style::Print(format!("[{}]", time.format("%H:%M"))),
+        ).unwrap();
         stdout.flush().unwrap();
     };
 
