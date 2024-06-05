@@ -1,8 +1,9 @@
 {
   "cSpell.words": [
-    "crossterm",
     "Datelike",
     "Timelike",
-    "hectodays"
+    "crossterm",
+    "hectodays",
+    "hectohours"
   ]
 }

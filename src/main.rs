@@ -92,11 +92,17 @@ fn handle_end(name: String) {
     let end = w.measure_end.unwrap();
     let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
     let hectodays  = s as f64 / 864.0;
-    let days = hectodays.round() / 100.0;
+    let mut unit = hectodays.round() / 100.0;
+    let mut units = "days";
+    if unit < 1.0 {
+        let hectohours = s as f64 / 36.0;
+        unit = hectohours.round() / 100.0;
+        units = "hours";
+    }
 
     println!("\n");
-    println!("Watch is running at {:+} seconds per {}, measured over {} days",
-        w.running.unwrap(), w.movement.unit_str(), days);
+    println!("Watch is running at {:+} seconds per {}, measured over {} {}",
+        w.running.unwrap(), w.movement.unit_str(), unit, units);
     println!("")
 }
 fn handle_search(query: String) {
@@ -172,6 +178,7 @@ fn get_one_watch_from_matches(watches: Vec<Watch>) -> Watch {
     let y_offset = cursor_y - watches.len() as u16;
     let mut cursor_idx = 0;
     crossterm::execute!(stdout, crossterm::cursor::MoveTo(0, cursor_idx as u16 + y_offset)).unwrap();
+
     // Clear and redraw arrows
     let mut update_selection = |cursor_idx: usize| {
         let (_, pre_move_y) = crossterm::cursor::position().unwrap();
@@ -324,12 +331,12 @@ struct Watch {
     name: String,
     movement: Movement,
     #[serde(skip_serializing_if = "Option::is_none")]
+    running: Option<f64>,
+    logs: Vec<NaiveDate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     measure_start: Option<WatchTimePair>,
     #[serde(skip_serializing_if = "Option::is_none")]
     measure_end: Option<WatchTimePair>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    running: Option<f64>,
-    logs: Vec<NaiveDate>,
 }
 struct WatchBuilder {
     name: Option<String>,
@@ -459,7 +466,7 @@ enum Commands {
         search: Vec<String>,
     },
 
-    /// Mark down a wear for today of the given watch
+    /// Mark down a wear of the given watch for today
     Log {
         #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
         name: Vec<String>,
