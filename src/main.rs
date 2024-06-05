@@ -20,7 +20,7 @@ fn main() {
         Commands::New { name, movement } => handle_new(WatchBuilder{ name, movement }),
         Commands::Start { name }         => handle_start(name.join(" ")),
         Commands::End { name }           => handle_end(name.join(" ")),
-        Commands::Ls { search }          => handle_search(search.join(" ")),
+        Commands::Ls { search }          => handle_ls(search.join(" ")),
         Commands::Recalculate { search } => handle_recalculate(search.join(" ")),
         Commands::Log { name }           => handle_log(name.join(" ")),
     }
@@ -88,24 +88,14 @@ fn handle_end(name: String) {
     w.update_running();
     w.save();
 
-    let start = w.measure_start.unwrap();
-    let end = w.measure_end.unwrap();
-    let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
-    let hectodays  = s as f64 / 864.0;
-    let mut unit = hectodays.round() / 100.0;
-    let mut units = "days";
-    if unit < 1.0 {
-        let hectohours = s as f64 / 36.0;
-        unit = hectohours.round() / 100.0;
-        units = "hours";
-    }
+    let (unit, units) = w.get_measure_time().unwrap();
 
     println!("\n");
     println!("Watch is running at {:+} seconds per {}, measured over {} {}",
         w.running.unwrap(), w.movement.unit_str(), unit, units);
     println!("")
 }
-fn handle_search(query: String) {
+fn handle_ls(query: String) {
     let watches = get_matching_watches(&query);
     for w in watches {
         println!("Name: {}", w.name);
@@ -117,12 +107,8 @@ fn handle_search(query: String) {
             println!("  No measure yet");
         }
 
-        // 'measured over'
-        if let Some(end) = w.measure_end {
-            let start = w.measure_start.unwrap();
-            let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
-            let hectodays  = s as f64 / 864.0;
-            println!("  Measured over: {} days", hectodays.round() / 100.00);
+        if let Some((unit, units)) = w.get_measure_time() {
+            println!("  Measured over: {} {}", unit, units);
         }
         println!("");
     }
@@ -415,6 +401,27 @@ impl Watch {
         let duration_diff = watch_time_passed.num_milliseconds() - real_time_passed.num_milliseconds();
         let diff_per_unit = (duration_diff * self.movement.unit()) as f64 / real_time_passed.num_milliseconds() as f64;
         self.running = Some(diff_per_unit.round() / 1000.0);
+    }
+
+    // TODO: Should I just split this by movement type? Hours for mech, days for quartz?
+    fn get_measure_time(&self) -> Option<(f64, String)> {
+        if self.measure_end.is_none() {
+            return None;
+        }
+        let start = self.measure_start.clone().unwrap();
+        let end = self.measure_end.clone().unwrap();
+        let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
+        let hectodays  = s as f64 / 864.0;
+        let mut unit = hectodays.round() / 100.0;
+        let mut units = "days";
+        if unit < 1.0 {
+            // Do hours if less than 1 day
+            let hectohours = s as f64 / 36.0;
+            unit = hectohours.round() / 100.0;
+            units = "hours";
+        }
+
+        Some((unit, units.to_owned()))
     }
 }
 
