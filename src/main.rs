@@ -65,17 +65,20 @@ fn handle_new(wb: WatchBuilder) {
 fn handle_start(name: String) {
     let mut w = get_matching_watch(name);
     println!("Starting measure for [{}]", w.name);
-    if let Some(start) = w.measure_start {
+    if let Some(start) = w.measure_start() {
         println!("Overwriting start time: {:?}", start);
     }
     let now = get_00_time();
     let watch_time = get_watch_time_from_real_time(now);
 
-    w.measure_start = Some( WatchTimePair {
-        real_time: now,
-        watch_time,
+    w.measures.push(Measure {
+        measure_start: Some( WatchTimePair {
+            real_time: now,
+            watch_time,
+        }),
+        measure_end: None,
+        running: None,
     });
-    w.measure_end = None;
     w.save()
 }
 fn handle_end(name: String) {
@@ -84,18 +87,18 @@ fn handle_end(name: String) {
     let now = get_00_time();
     let watch_time = get_watch_time_from_real_time(now);
 
-    w.measure_end = Some( WatchTimePair {
+    w.measures.last_mut().unwrap().measure_end = Some( WatchTimePair {
         real_time: now,
         watch_time,
     });
     w.update_running();
     w.save();
 
-    let (unit, units) = w.get_measure_time().unwrap();
+    let (unit, units) = w.last_complete_measure().unwrap().get_measure_time();
 
     println!("\n");
     println!("Watch is running at {:+} seconds per {}, measured over {} {}",
-        w.running.unwrap(), w.movement.unit_str(), unit, units);
+        w.running().unwrap(), w.movement.unit_str(), unit, units);
     println!("")
 }
 fn handle_ls(query: String) {
@@ -104,15 +107,14 @@ fn handle_ls(query: String) {
         println!("Name: {}", w.name);
         println!("  Movement: {}", w.movement.to_str());
 
-        if let Some(run) = w.running {
-            println!("  Running at: {:+} seconds per {}", run, w.movement.unit_str());
+        if let Some(m) = w.last_complete_measure() {
+            println!("  Running at: {:+} seconds per {}", m.running.unwrap(), w.movement.unit_str());
+            let (unit, units) = m.get_measure_time();
+            println!("  Measured over: {} {}", unit, units);
         } else {
             println!("  No measure yet");
         }
 
-        if let Some((unit, units)) = w.get_measure_time() {
-            println!("  Measured over: {} {}", unit, units);
-        }
         println!("");
     }
 }
@@ -168,7 +170,7 @@ fn get_one_watch_from_matches(watches: Vec<Watch>) -> Watch {
     let mut cursor_idx = 0;
     crossterm::execute!(stdout, crossterm::cursor::MoveTo(0, cursor_idx as u16 + y_offset)).unwrap();
 
-    // Clear and redraw arrows
+    // closure: Clear and redraw arrows
     let mut update_selection = |cursor_idx: usize| {
         let (_, pre_move_y) = crossterm::cursor::position().unwrap();
         let pre_idx = match pre_move_y < cursor_idx as u16 + y_offset {
@@ -235,6 +237,7 @@ fn get_watch_time_from_real_time(t: DateTime<Local>) -> DateTime<Local> {
 
     let (_cursor_x, cursor_y) = crossterm::cursor::position().unwrap();
 
+    // closure: Redraw time
     let mut update_time = |time: &DateTime<Local>| {
         // 35/38/42?
         crossterm::execute!(stdout,
@@ -319,9 +322,13 @@ fn save_file(w: Vec<Watch>) {
 struct Watch {
     name: String,
     movement: Movement,
+    logs: Vec<NaiveDate>,
+    measures: Vec<Measure>,
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Measure {
     #[serde(skip_serializing_if = "Option::is_none")]
     running: Option<f64>,
-    logs: Vec<NaiveDate>,
     #[serde(skip_serializing_if = "Option::is_none")]
     measure_start: Option<WatchTimePair>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -367,10 +374,8 @@ impl Watch {
         Watch {
             name: String::new(),
             movement: Movement::Quartz,
-            measure_start: None,
-            measure_end: None,
-            running: None,
             logs: Vec::new(),
+            measures: Vec::new(),
         }
     }
 
@@ -393,26 +398,54 @@ impl Watch {
         save_file(watches)
     }
 
-    fn update_running(&mut self) {
-        let real_time_start  = self.measure_start.clone().unwrap().real_time;
-        let watch_time_start = self.measure_start.clone().unwrap().watch_time;
-        let real_time_end    = self.measure_end.clone().unwrap().real_time;
-        let watch_time_end   = self.measure_end.clone().unwrap().watch_time;
-
-        let real_time_passed = real_time_end.signed_duration_since(real_time_start);
-        let watch_time_passed = watch_time_end.signed_duration_since(watch_time_start);
-        let duration_diff = watch_time_passed.num_milliseconds() - real_time_passed.num_milliseconds();
-        let diff_per_unit = (duration_diff * self.movement.unit()) as f64 / real_time_passed.num_milliseconds() as f64;
-        self.running = Some(diff_per_unit.round() / 1000.0);
+    fn measure_start(&self) -> Option<WatchTimePair> {
+        if let Some(m) = self.measures.last() {
+            return m.measure_start.clone();
+        }
+        None
+    }
+    fn measure_end(&self) -> Option<WatchTimePair> {
+        if let Some(m) = self.measures.last() {
+            return m.measure_end.clone();
+        }
+        None
+    }
+    fn running(&self) -> Option<f64> {
+        if let Some(m) = self.measures.last() {
+            return m.running.clone();
+        }
+        None
+    }
+    fn last_complete_measure(&self) -> Option<&Measure> {
+        for m in self.measures.iter().rev() {
+            if m.measure_start.is_some() &&
+               m.measure_end.is_some() &&
+               m.running.is_some() {
+                   return Some(m);
+            }
+        }
+        None
     }
 
-    // TODO: Should I just split this by movement type? Hours for mech, days for quartz?
-    fn get_measure_time(&self) -> Option<(f64, String)> {
-        if self.measure_end.is_none() {
-            return None;
+    fn update_running(&mut self) {
+        for m in &mut self.measures {
+            let real_time_start  = m.measure_start.as_ref().unwrap().real_time;
+            let watch_time_start = m.measure_start.as_ref().unwrap().watch_time;
+            let real_time_end    = m.measure_end.as_ref().unwrap().real_time;
+            let watch_time_end   = m.measure_end.as_ref().unwrap().watch_time;
+
+            let real_time_passed = real_time_end.signed_duration_since(real_time_start);
+            let watch_time_passed = watch_time_end.signed_duration_since(watch_time_start);
+            let duration_diff = watch_time_passed.num_milliseconds() - real_time_passed.num_milliseconds();
+            let diff_per_unit = (duration_diff * self.movement.unit()) as f64 / real_time_passed.num_milliseconds() as f64;
+            m.running = Some(diff_per_unit.round() / 1000.0);
         }
-        let start = self.measure_start.clone().unwrap();
-        let end = self.measure_end.clone().unwrap();
+    }
+}
+impl Measure {
+    fn get_measure_time(&self) -> (f64, String) {
+        let start = self.measure_start.as_ref().unwrap();
+        let end = self.measure_end.as_ref().unwrap();
         let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
         let hectodays  = s as f64 / 864.0;
         let mut unit = hectodays.round() / 100.0;
@@ -424,7 +457,7 @@ impl Watch {
             units = "hours";
         }
 
-        Some((unit, units.to_owned()))
+        (unit, units.to_owned())
     }
 }
 
