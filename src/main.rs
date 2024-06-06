@@ -65,6 +65,9 @@ fn handle_new(wb: WatchBuilder) {
 fn handle_start(name: String) {
     let mut w = get_matching_watch(name);
     println!("Starting measure for [{}]", w.name);
+    if let Some(start) = w.measure_start {
+        println!("Overwriting start time: {:?}", start);
+    }
     let now = get_00_time();
     let watch_time = get_watch_time_from_real_time(now);
 
