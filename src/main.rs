@@ -404,12 +404,6 @@ impl Watch {
         }
         None
     }
-    fn measure_end(&self) -> Option<WatchTimePair> {
-        if let Some(m) = self.measures.last() {
-            return m.measure_end.clone();
-        }
-        None
-    }
     fn running(&self) -> Option<f64> {
         if let Some(m) = self.measures.last() {
             return m.running.clone();
