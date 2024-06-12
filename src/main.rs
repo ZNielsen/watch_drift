@@ -423,6 +423,9 @@ impl Watch {
 
     fn update_running(&mut self) {
         for m in &mut self.measures {
+            if m.measure_start.is_none() || m.measure_end.is_none() {
+                continue;
+            }
             let real_time_start  = m.measure_start.as_ref().unwrap().real_time;
             let watch_time_start = m.measure_start.as_ref().unwrap().watch_time;
             let real_time_end    = m.measure_end.as_ref().unwrap().real_time;
