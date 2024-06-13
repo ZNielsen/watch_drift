@@ -83,7 +83,12 @@ fn handle_start(name: String) {
 }
 fn handle_end(name: String) {
     let mut w = get_matching_watch(name);
-    println!("Ending measure for [{}]", w.name);
+    if w.measures.last().unwrap().measure_end.is_some() {
+        println!("End measure update for [{}]", w.name);
+        println!("Updating measure:\n{}", w.measures.last().unwrap());
+    } else {
+        println!("Ending measure for [{}]", w.name);
+    }
     let now = get_00_time();
     let watch_time = get_watch_time_from_real_time(now);
 
@@ -455,6 +460,33 @@ impl Measure {
         }
 
         (unit, units.to_owned())
+    }
+}
+impl std::fmt::Display for Measure {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.running.is_none() {
+            write!(f, "  Running: None\n")?;
+        } else {
+            write!(f, "  Running: {:+} seconds\n", self.running.as_ref().unwrap())?;
+        }
+
+        if self.measure_start.is_none() {
+            write!(f, "  Start: None\n")?;
+        } else {
+            write!(f, "  Start:\n")?;
+            write!(f, "    Watch: {}\n", self.measure_start.as_ref().unwrap().watch_time)?;
+            write!(f, "    Real : {}\n", self.measure_start.as_ref().unwrap().real_time)?;
+        }
+
+        if self.measure_start.is_none() {
+            write!(f, "  End: None\n")?;
+        } else {
+            write!(f, "  End:\n")?;
+            write!(f, "    Watch: {}\n", self.measure_end.as_ref().unwrap().watch_time)?;
+            write!(f, "    Real : {}\n", self.measure_end.as_ref().unwrap().real_time)?;
+        }
+
+        Ok(())
     }
 }
 
