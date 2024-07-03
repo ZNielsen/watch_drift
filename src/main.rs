@@ -145,7 +145,7 @@ fn handle_log(name: String) {
         w.save();
         println!("Added log for watch. Now worn on {} days.", w.logs.len())
     } else {
-        println!("Already logged watch for today, not adding again.");
+        println!("Already logged watch for today, not adding again (worn on {} days)", w.logs.len());
     }
 }
 
