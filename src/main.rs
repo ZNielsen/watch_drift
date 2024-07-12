@@ -119,6 +119,7 @@ fn handle_ls(query: String) {
         } else {
             println!("  No measure yet");
         }
+        println!("  Worn on {} days", w.logs.len());
 
         println!("");
     }
