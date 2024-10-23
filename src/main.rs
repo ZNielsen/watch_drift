@@ -3,6 +3,7 @@
 use std::fs::File;
 use std::path::PathBuf;
 use std::io::{self, Write};
+use std::cmp::max;
 
 use chrono::{self, DateTime, Datelike, Local, naive::NaiveDate, TimeZone, Timelike};
 use clap::{Parser, Subcommand};
@@ -23,6 +24,7 @@ fn main() {
         Commands::Ls { search }          => handle_ls(search.join(" ")),
         Commands::Recalculate { search } => handle_recalculate(search.join(" ")),
         Commands::Log { name }           => handle_log(name.join(" ")),
+        Commands::Print { }              => handle_print(),
     }
 }
 fn handle_new(wb: WatchBuilder) {
@@ -77,7 +79,7 @@ fn handle_start(name: String) {
             watch_time,
         }),
         measure_end: None,
-        running: None,
+        drift: None,
     });
     w.save()
 }
@@ -103,7 +105,7 @@ fn handle_end(name: String) {
 
     println!("\n");
     println!("Watch is running at {:+} seconds per {}, measured over {} {}",
-        w.running().unwrap(), w.movement.unit_str(), unit, units);
+        w.drift().unwrap(), w.movement.unit_str(), unit, units);
     println!("")
 }
 fn handle_ls(query: String) {
@@ -113,7 +115,7 @@ fn handle_ls(query: String) {
         println!("  Movement: {}", w.movement.to_str());
 
         if let Some(m) = w.last_complete_measure() {
-            println!("  Running at: {:+} seconds per {}", m.running.unwrap(), w.movement.unit_str());
+            println!("  Running at: {:+} seconds per {}", m.drift.unwrap(), w.movement.unit_str());
             let (unit, units) = m.get_measure_time();
             println!("  Measured over: {} {}", unit, units);
         } else {
@@ -148,6 +150,10 @@ fn handle_log(name: String) {
     } else {
         println!("Already logged watch for today, not adding again (worn on {} days)", w.logs.len());
     }
+}
+fn handle_print() {
+    let watches = get_matching_watches("");
+    print_markdown_table(watches);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -334,7 +340,7 @@ struct Watch {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Measure {
     #[serde(skip_serializing_if = "Option::is_none")]
-    running: Option<f64>,
+    drift: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     measure_start: Option<WatchTimePair>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -410,9 +416,9 @@ impl Watch {
         }
         None
     }
-    fn running(&self) -> Option<f64> {
+    fn drift(&self) -> Option<f64> {
         if let Some(m) = self.measures.last() {
-            return m.running.clone();
+            return m.drift.clone();
         }
         None
     }
@@ -420,7 +426,7 @@ impl Watch {
         for m in self.measures.iter().rev() {
             if m.measure_start.is_some() &&
                m.measure_end.is_some() &&
-               m.running.is_some() {
+               m.drift.is_some() {
                    return Some(m);
             }
         }
@@ -441,7 +447,7 @@ impl Watch {
             let watch_time_passed = watch_time_end.signed_duration_since(watch_time_start);
             let duration_diff = watch_time_passed.num_milliseconds() - real_time_passed.num_milliseconds();
             let diff_per_unit = (duration_diff * self.movement.unit()) as f64 / real_time_passed.num_milliseconds() as f64;
-            m.running = Some(diff_per_unit.round() / 1000.0);
+            m.drift = Some(diff_per_unit.round() / 1000.0);
         }
     }
 }
@@ -465,10 +471,10 @@ impl Measure {
 }
 impl std::fmt::Display for Measure {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.running.is_none() {
-            write!(f, "  Running: None\n")?;
+        if self.drift.is_none() {
+            write!(f, "  Drift: None\n")?;
         } else {
-            write!(f, "  Running: {:+} seconds\n", self.running.as_ref().unwrap())?;
+            write!(f, "  Drift: {:+} seconds\n", self.drift.as_ref().unwrap())?;
         }
 
         if self.measure_start.is_none() {
@@ -489,6 +495,115 @@ impl std::fmt::Display for Measure {
 
         Ok(())
     }
+}
+
+fn print_markdown_table(mut watches: Vec<Watch>) {
+    println!();
+    // Watch Name | Type | Drift | # Wears
+    let name_header = "Watch Name";
+    let type_header = "Type";
+    let drift_header = "Drift";
+    let wears_header = "Num. Wears";
+
+    // Sort by number of wears
+    watches.sort_by_key(|w| w.logs.len());
+    watches.reverse();
+
+    // Get widths of the columns - Name
+    // let max_name_len = 30;
+    let mut name_len = name_header.len();
+    let mut name_heights = Vec::new();
+    for w in &watches {
+        // name_heights.push(1 + (w.name.len() / max_name_len));
+        name_heights.push(1);
+        name_len = max(name_len, w.name.len());
+    }
+
+    // Get widths of the columns - Type
+    let type_len = max(type_header.len(), "Mechanical".len());
+
+    // Get widths of the columns - Drift
+    let mut drift_len = drift_header.len();
+    for w in &watches {
+        let drift_str = match w.drift() {
+            Some(drift) => {
+                let (unit, units) = w.last_complete_measure().unwrap().get_measure_time();
+                format!("{:+}s/{}, ({} {})", drift, w.movement.unit_str(), unit, units)
+            },
+            None => "??".to_owned(),
+        };
+        drift_len = max(drift_len, drift_str.len());
+    }
+
+    // Get widths of the columns - Wears
+    let mut wears_len = wears_header.len();
+    for w in &watches {
+        wears_len = max(wears_len, format!("{} days", w.logs.len()).len());
+    }
+
+    // Print the table
+    // Header
+    let (name_pad_l, name_pad_r) = get_left_right_padding(name_header, name_len);
+    let (type_pad_l, type_pad_r) = get_left_right_padding(type_header, type_len);
+    let (drift_pad_l, drift_pad_r) = get_left_right_padding(drift_header, drift_len);
+    let (wears_pad_l, wears_pad_r) = get_left_right_padding(wears_header, wears_len);
+    println!(
+        "| {:n_l$}{n}{:n_r$} | {:t_l$}{t}{:t_r$} | {:d_l$}{d}{:d_r$} | {:w_l$}{w}{:w_r$} |", "", "", "", "", "", "", "", "",
+        n_l = name_pad_l,
+        n = name_header,
+        n_r = name_pad_r,
+        t_l = type_pad_l,
+        t = type_header,
+        t_r = type_pad_r,
+        d_l = drift_pad_l,
+        d = drift_header,
+        d_r = drift_pad_r,
+        w_l = wears_pad_l,
+        w = wears_header,
+        w_r = wears_pad_r,
+    );
+    println!("|{}|{}|{}|{}|",
+        "-".repeat(name_len + 2),
+        "-".repeat(type_len + 2),
+        "-".repeat(drift_len + 2),
+        "-".repeat(wears_len + 2),
+    );
+
+    // Looping over body
+    for (watch, height) in watches.iter().zip(name_heights.iter()) {
+        let n = &watch.name;
+        let t = watch.movement.to_str();
+        let d = match watch.drift() {
+            Some(drift) => {
+                let (unit, units) = watch.last_complete_measure().unwrap().get_measure_time();
+                format!("{:+}s/{}, ({} {})", drift, watch.movement.unit_str(), unit, units)
+            },
+            None => "??".to_owned(),
+        };
+        let w = format!("{} days", watch.logs.len());
+
+        let (name_pad_l, name_pad_r) = get_left_right_padding(&n, name_len);
+        let (type_pad_l, type_pad_r) = get_left_right_padding(&t, type_len);
+        let (drift_pad_l, drift_pad_r) = get_left_right_padding(&d, drift_len);
+        let (wears_pad_l, wears_pad_r) = get_left_right_padding(&w, wears_len);
+        println!(
+            "| {:n_l$}{n}{:n_r$} | {:t_l$}{t}{:t_r$} | {:d_l$}{d}{:d_r$} | {:w_l$}{w}{:w_r$} |", "", "", "", "", "", "", "", "",
+            n_l = name_pad_l,
+            n_r = name_pad_r,
+            t_l = type_pad_l,
+            t_r = type_pad_r,
+            d_l = drift_pad_l,
+            d_r = drift_pad_r,
+            w_l = wears_pad_l,
+            w_r = wears_pad_r,
+        );
+    }
+}
+
+fn get_left_right_padding(s: &str, len: usize) -> (usize, usize) {
+    let left = (len - s.len()) / 2;
+    let right = len - s.len() - left;
+    (left, right)
 }
 
 #[derive(Parser)]
@@ -543,5 +658,9 @@ enum Commands {
     Log {
         #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
         name: Vec<String>,
+    },
+
+    /// Print all watches to a markdown table
+    Print {
     },
 }
