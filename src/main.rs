@@ -221,6 +221,8 @@ fn get_one_watch_from_matches(watches: Vec<Watch>) -> Watch {
                     KeyCode::Enter => break,
                     KeyCode::Char('c') => {
                         if key_event.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+                            crossterm::terminal::disable_raw_mode().unwrap();
+                            println!("\n\n");
                             panic!("Got CTRL-C, hard quitting");
                         }
                     },
