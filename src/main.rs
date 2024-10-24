@@ -457,6 +457,19 @@ impl Watch {
             m.drift = Some(diff_per_unit.round() / 1000.0);
         }
     }
+
+    fn table_print_name(&self) -> String {
+        if self.measures.len() == 0 {
+            return self.name.clone()
+        }
+
+        // Indicate if there is an active measure for this watch
+        if self.measures.last().unwrap().measure_end.is_none() {
+            return format!("* {} *", self.name);
+        }
+
+        self.name.clone()
+    }
 }
 impl Measure {
     fn get_measure_time(&self) -> (f64, String) {
@@ -522,9 +535,9 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
     let mut name_heights = Vec::new();
     for w in &watches {
         // TODO, GH-20: wrap names if they are too long
-        // name_heights.push(1 + (w.name.len() / max_name_len));
+        // name_heights.push(1 + (w.table_print_name().len() / max_name_len));
         name_heights.push(1);
-        name_len = max(name_len, w.name.len());
+        name_len = max(name_len, w.table_print_name().len());
     }
 
     // Get widths of the columns - Type
@@ -579,7 +592,7 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
 
     // Looping over body
     for (watch, _) in watches.iter().zip(name_heights.iter()) {
-        let n = &watch.name;
+        let n = &watch.table_print_name();
         let t = watch.movement.to_str();
         let d = match watch.drift() {
             Some(drift) => {
