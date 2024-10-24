@@ -521,6 +521,7 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
     let mut name_len = name_header.len();
     let mut name_heights = Vec::new();
     for w in &watches {
+        // TODO, GH-20: wrap names if they are too long
         // name_heights.push(1 + (w.name.len() / max_name_len));
         name_heights.push(1);
         name_len = max(name_len, w.name.len());
@@ -577,7 +578,7 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
     );
 
     // Looping over body
-    for (watch, height) in watches.iter().zip(name_heights.iter()) {
+    for (watch, _) in watches.iter().zip(name_heights.iter()) {
         let n = &watch.name;
         let t = watch.movement.to_str();
         let d = match watch.drift() {
