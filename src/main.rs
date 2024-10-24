@@ -218,22 +218,22 @@ fn get_one_watch_from_matches(watches: Vec<Watch>) -> Watch {
                             update_selection(cursor_idx);
                         }
                     },
-                    KeyCode::Enter => break,
                     KeyCode::Char('c') => {
                         if key_event.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
                             crossterm::terminal::disable_raw_mode().unwrap();
-                            println!("\n\n");
+                            print!("{}", "\n".repeat(1 + watches.len() - cursor_idx));
                             panic!("Got CTRL-C, hard quitting");
                         }
                     },
+                    KeyCode::Enter => break,
                     _ => {},
                 }
             }
         }
     }
     crossterm::terminal::disable_raw_mode().unwrap();
-
-    println!("\n");
+    // Push the printed watches out of the way of the to-come confirmation dialog
+    print!("{}", "\n".repeat(1 + watches.len() - cursor_idx));
     watches[cursor_idx].clone()
 }
 
