@@ -663,6 +663,7 @@ enum Commands {
     },
 
     /// End or Update a measure for the given watch
+    #[clap(alias = "stop")]
     End {
         /// Name of the watch
         #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
