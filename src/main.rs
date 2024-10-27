@@ -459,16 +459,22 @@ impl Watch {
     }
 
     fn table_print_name(&self) -> String {
+        let mut name = self.name.clone();
         if self.measures.len() == 0 {
-            return self.name.clone()
+            return name
         }
 
         // Indicate if there is an active measure for this watch
         if self.measures.last().unwrap().measure_end.is_none() {
-            return format!("* {} *", self.name);
+            name = format!("* {} *", name);
         }
 
-        self.name.clone()
+        // Indicate if we wore this watch today
+        if !self.logs.is_empty() && *self.logs.last().unwrap() == Local::now().date_naive() {
+            name = format!("--> {} <--", self.name);
+        }
+
+        name
     }
 }
 impl Measure {
