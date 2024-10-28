@@ -625,6 +625,7 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
             w_r = wears_pad_r,
         );
     }
+    println!("");
 }
 
 fn get_left_right_padding(s: &str, len: usize) -> (usize, usize) {
