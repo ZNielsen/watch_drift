@@ -101,26 +101,41 @@ fn handle_end(name: String) {
     w.update_running();
     w.save();
 
-    let (unit, units) = w.last_complete_measure().unwrap().get_measure_time();
+    let (val, units) = w.last_complete_measure().unwrap().measure_duration_and_units();
 
     println!("\n");
     println!("Watch is running at {:+} seconds per {}, measured over {} {}",
-        w.drift().unwrap(), w.movement.unit_str(), unit, units);
+        w.drift().unwrap(), w.movement.unit_str(), val, units);
     println!("")
 }
 fn handle_ls(query: String) {
     let watches = get_matching_watches(&query);
     for w in watches {
+        // Name
         println!("Name: {}", w.name);
+
+        // Movement
         println!("  Movement: {}", w.movement.to_str());
 
+        // Measure/Drift
         if let Some(m) = w.last_complete_measure() {
             println!("  Running at: {:+} seconds per {}", m.drift.unwrap(), w.movement.unit_str());
-            let (unit, units) = m.get_measure_time();
-            println!("  Measured over: {} {}", unit, units);
+            let (val, units) = m.measure_duration_and_units();
+            println!("  Measured over: {} {}", val, units);
         } else {
-            println!("  No measure yet");
+            println!("  No completed measures yet");
         }
+
+        // Active Measures
+        if let Some(m) = w.measures.last() {
+            if let None = m.measure_end {
+                let start = m.measure_start.clone().unwrap();
+                let (val, units) = get_measure_duration_and_units(start.real_time, Local::now());
+                println!("  Active measure, started {} {} ago", val, units);
+            }
+        }
+
+        // Logs
         println!("  Worn on {} days", w.logs.len());
 
         println!("");
@@ -478,21 +493,10 @@ impl Watch {
     }
 }
 impl Measure {
-    fn get_measure_time(&self) -> (f64, String) {
+    fn measure_duration_and_units(&self) -> (f64, String) {
         let start = self.measure_start.as_ref().unwrap();
         let end = self.measure_end.as_ref().unwrap();
-        let s = end.real_time.signed_duration_since(start.real_time).num_seconds();
-        let hectodays  = s as f64 / 864.0;
-        let mut unit = hectodays.round() / 100.0;
-        let mut units = "days";
-        if unit < 1.0 {
-            // Do hours if less than 1 day
-            let hectohours = s as f64 / 36.0;
-            unit = hectohours.round() / 100.0;
-            units = "hours";
-        }
-
-        (unit, units.to_owned())
+        get_measure_duration_and_units(start.real_time, end.real_time)
     }
 }
 impl std::fmt::Display for Measure {
@@ -521,6 +525,21 @@ impl std::fmt::Display for Measure {
 
         Ok(())
     }
+}
+
+fn get_measure_duration_and_units(start: DateTime<Local>, end: DateTime<Local>) -> (f64, String) {
+    let s = end.signed_duration_since(start).num_seconds();
+    let hectodays  = s as f64 / 864.0;
+    let mut unit = hectodays.round() / 100.0;
+    let mut units = "days";
+    if unit < 1.0 {
+        // Do hours if less than 1 day
+        let hectohours = s as f64 / 36.0;
+        unit = hectohours.round() / 100.0;
+        units = "hours";
+    }
+
+    (unit, units.to_owned())
 }
 
 fn print_markdown_table(mut watches: Vec<Watch>) {
@@ -554,7 +573,7 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
     for w in &watches {
         let drift_str = match w.drift() {
             Some(drift) => {
-                let (unit, units) = w.last_complete_measure().unwrap().get_measure_time();
+                let (unit, units) = w.last_complete_measure().unwrap().measure_duration_and_units();
                 format!("{:+}s/{}, ({} {})", drift, w.movement.unit_str(), unit, units)
             },
             None => "??".to_owned(),
@@ -602,8 +621,8 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
         let t = watch.movement.to_str();
         let d = match watch.drift() {
             Some(drift) => {
-                let (unit, units) = watch.last_complete_measure().unwrap().get_measure_time();
-                format!("{:+}s/{}, ({} {})", drift, watch.movement.unit_str(), unit, units)
+                let (val, units) = watch.last_complete_measure().unwrap().measure_duration_and_units();
+                format!("{:+}s/{}, ({} {})", drift, watch.movement.unit_str(), val, units)
             },
             None => "??".to_owned(),
         };
