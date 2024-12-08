@@ -544,11 +544,11 @@ fn get_measure_duration_and_units(start: DateTime<Local>, end: DateTime<Local>) 
 
 fn print_markdown_table(mut watches: Vec<Watch>) {
     println!();
-    // Watch Name | Type | Drift | # Wears
+    // Watch Name | # Wears | Drift | Type
     let name_header = "Watch Name";
-    let type_header = "Type";
-    let drift_header = "Drift";
     let wears_header = "Num. Wears";
+    let drift_header = "Drift";
+    let type_header = "Type";
 
     // Sort by number of wears
     watches.sort_by_key(|w| w.logs.len());
@@ -565,8 +565,11 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
         name_len = max(name_len, w.table_print_name().len());
     }
 
-    // Get widths of the columns - Type
-    let type_len = max(type_header.len(), "Mechanical".len());
+    // Get widths of the columns - Wears
+    let mut wears_len = wears_header.len();
+    for w in &watches {
+        wears_len = max(wears_len, format!("{} days", w.logs.len()).len());
+    }
 
     // Get widths of the columns - Drift
     let mut drift_len = drift_header.len();
@@ -581,38 +584,35 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
         drift_len = max(drift_len, drift_str.len());
     }
 
-    // Get widths of the columns - Wears
-    let mut wears_len = wears_header.len();
-    for w in &watches {
-        wears_len = max(wears_len, format!("{} days", w.logs.len()).len());
-    }
+    // Get widths of the columns - Type
+    let type_len = max(type_header.len(), "Mechanical".len());
 
     // Print the table
     // Header
     let (name_pad_l, name_pad_r) = get_left_right_padding(name_header, name_len);
-    let (type_pad_l, type_pad_r) = get_left_right_padding(type_header, type_len);
-    let (drift_pad_l, drift_pad_r) = get_left_right_padding(drift_header, drift_len);
     let (wears_pad_l, wears_pad_r) = get_left_right_padding(wears_header, wears_len);
+    let (drift_pad_l, drift_pad_r) = get_left_right_padding(drift_header, drift_len);
+    let (type_pad_l, type_pad_r) = get_left_right_padding(type_header, type_len);
     println!(
-        "| {:n_l$}{n}{:n_r$} | {:t_l$}{t}{:t_r$} | {:d_l$}{d}{:d_r$} | {:w_l$}{w}{:w_r$} |", "", "", "", "", "", "", "", "",
+        "| {:n_l$}{n}{:n_r$} | {:w_l$}{w}{:w_r$} | {:d_l$}{d}{:d_r$} | {:t_l$}{t}{:t_r$} |", "", "", "", "", "", "", "", "",
         n_l = name_pad_l,
         n = name_header,
         n_r = name_pad_r,
-        t_l = type_pad_l,
-        t = type_header,
-        t_r = type_pad_r,
-        d_l = drift_pad_l,
-        d = drift_header,
-        d_r = drift_pad_r,
         w_l = wears_pad_l,
         w = wears_header,
         w_r = wears_pad_r,
+        d_l = drift_pad_l,
+        d = drift_header,
+        d_r = drift_pad_r,
+        t_l = type_pad_l,
+        t = type_header,
+        t_r = type_pad_r,
     );
     println!("|{}|{}|{}|{}|",
         "-".repeat(name_len + 2),
-        "-".repeat(type_len + 2),
-        "-".repeat(drift_len + 2),
         "-".repeat(wears_len + 2),
+        "-".repeat(drift_len + 2),
+        "-".repeat(type_len + 2),
     );
 
     // Looping over body
@@ -633,15 +633,15 @@ fn print_markdown_table(mut watches: Vec<Watch>) {
         let (drift_pad_l, drift_pad_r) = get_left_right_padding(&d, drift_len);
         let (wears_pad_l, wears_pad_r) = get_left_right_padding(&w, wears_len);
         println!(
-            "| {:n_l$}{n}{:n_r$} | {:t_l$}{t}{:t_r$} | {:d_l$}{d}{:d_r$} | {:w_l$}{w}{:w_r$} |", "", "", "", "", "", "", "", "",
+            "| {:n_l$}{n}{:n_r$} | {:w_l$}{w}{:w_r$} | {:d_l$}{d}{:d_r$} | {:t_l$}{t}{:t_r$} |", "", "", "", "", "", "", "", "",
             n_l = name_pad_l,
             n_r = name_pad_r,
-            t_l = type_pad_l,
-            t_r = type_pad_r,
-            d_l = drift_pad_l,
-            d_r = drift_pad_r,
             w_l = wears_pad_l,
             w_r = wears_pad_r,
+            d_l = drift_pad_l,
+            d_r = drift_pad_r,
+            t_l = type_pad_l,
+            t_r = type_pad_r,
         );
     }
     println!("");
