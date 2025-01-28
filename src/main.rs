@@ -46,7 +46,8 @@ fn handle_new(wb: WatchBuilder) {
             println!("Watch type");
             println!("  [1]: Quartz");
             println!("  [2]: Mechanical");
-            print!  ("Enter (1/2): ");
+            println!("  [3]: Smart");
+            print!  ("Enter (1/2/3): ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
             io::stdin().read_line(&mut input)
@@ -54,6 +55,7 @@ fn handle_new(wb: WatchBuilder) {
             mvt = match input.trim() {
                 "1" => Some(Movement::Quartz),
                 "2" => Some(Movement::Mechanical),
+                "3" => Some(Movement::Smart),
                 _ => None,
             };
         }
@@ -381,17 +383,21 @@ struct WatchTimePair {
 enum Movement {
     Quartz,
     Mechanical,
+    Smart,
 }
 impl Movement {
+    // unit returns milliseconds per unit (day or month)
     fn unit(&self) -> i64 {
         match self {
             Movement::Quartz => 2628000000,
             Movement::Mechanical => 86400000,
+            Movement::Smart => 2628000000,
         }
     }
     fn unit_str(&self) -> &str {
         match self {
             Movement::Quartz => "month",
+            Movement::Smart => "month",
             Movement::Mechanical => "day",
         }
     }
@@ -399,6 +405,7 @@ impl Movement {
         match self {
             Movement::Quartz => "Quartz",
             Movement::Mechanical => "Mechanical",
+            Movement::Smart => "Smart",
         }
     }
 }
@@ -663,7 +670,7 @@ enum Commands {
         /// Name of the watch
         #[clap(short)]
         name: Option<String>,
-        /// QUARTZ or MECHANICAL movement
+        /// QUARTZ, MECHANICAL, or SMART movement
         ///
         /// Used when calculating how the watch is running to give you Seconds per Day (spd) or
         /// Seconds per Month (spm)
