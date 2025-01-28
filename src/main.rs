@@ -475,12 +475,9 @@ impl Watch {
 
     fn table_print_name(&self) -> String {
         let mut name = self.name.clone();
-        if self.measures.len() == 0 {
-            return name
-        }
 
         // Indicate if there is an active measure for this watch
-        if self.measures.last().unwrap().measure_end.is_none() {
+        if !self.measures.is_empty() && self.measures.last().unwrap().measure_end.is_none() {
             name = format!("* {} *", name);
         }
 
