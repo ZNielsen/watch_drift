@@ -187,8 +187,10 @@ fn get_matching_watch(query: String) -> Watch {
     }
     matches[0].clone()
 }
-fn get_one_watch_from_matches(watches: Vec<Watch>) -> Watch {
+fn get_one_watch_from_matches(mut watches: Vec<Watch>) -> Watch {
     println!("Choose with arrow keys:");
+    watches.sort_by_key(|w| w.logs.len());
+    watches.reverse();
     for (idx, watch) in watches.iter().enumerate() {
         println!("[{}] {}", idx, watch.name);
     }
