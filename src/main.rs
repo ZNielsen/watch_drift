@@ -490,7 +490,7 @@ impl Watch {
 
         // Indicate if we wore this watch today
         if !self.logs.is_empty() && *self.logs.last().unwrap() == Local::now().date_naive() {
-            name = format!("--> {} <--", self.name);
+            name = format!("--> {} <--", name);
         }
 
         name
